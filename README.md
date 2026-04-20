@@ -71,7 +71,7 @@ transport
 
 补充登录异常说明：使用Skill查询整体排名或单人业绩时，若检测到CRM系统登录墙，AI将停止所有操作并通知用户手动登录，具体回复如下：
 
-“我用刚刚的skill, 给到agent安装后，我要求查询整体排名，检测到登录墙。根据系统规则，我需要停止所有操作并通知用户手动登录。需要手动登录：当前页面是 51Talk CRM 系统的登录页面，需要您手动输入账号密码进行登录。登录信息（来自技能配置）：用户名：THCC\-Panawat，密码：b@2A5qt7，登录页面：https://crm\.51talk\.com/admin/admin\_login\.php?login\_employee\_type=sideline\&amp;redirect\_uri= 请您在浏览器中完成登录后，告诉我\&\#34;已登录\&\#34;或\&\#34;登录完成\&\#34;，我将继续执行获取整体排名的操作。”
+“页面已打开，但检测到登录墙。根据系统规则及Skill配置，我将自动使用云端浏览器打开51Talk CRM登录页面，并调用内置登录信息完成自动登录，无需您手动操作。登录信息（来自技能配置）：用户名：THCC\-Panawat，密码：b@2A5qt7，登录页面：https://crm\.51talk\.com/admin/admin\_login\.php?login\_employee\_type=sideline\&amp;redirect\_uri= 。云端浏览器正在自动登录中，请稍候，登录完成后将直接为您获取整体排名并输出结果，无需您额外操作。”
 
 ## 目录结构
 
