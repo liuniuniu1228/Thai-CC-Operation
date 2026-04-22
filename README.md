@@ -1,77 +1,79 @@
-### 1. README.md
-**用途**：面向人类开发者或你自己，记录如何配置环境、安全事项及运行脚本。
+
+### 1. README.md (更新版)
+**重点：** 增加了多模式运行指令的说明。
 
 ```markdown
-# CRM Performance Tracker 🚀
+# CRM Performance & Call Analytics Tracker 🚀
 
-本项目包含一套用于自动化登录 CRM 系统并提取业绩数据的工具。
+本项目是一套用于自动化提取 CRM 系统数据的工具库，支持实时监控员工的**业绩排名**及**通话行为效率**。
 
 ## 📁 目录结构
-- `main/crm_tool.py`: 核心 Python 脚本，处理登录、抓取与数据解析。
-- `requirements.txt`: 项目依赖库。
+- `main/crm_tool.py`: 核心脚本，支持 `perf` (业绩) 和 `call` (通话) 两种抓取模式。
+- `requirements.txt`: 包含 `requests`, `beautifulsoup4`, `lxml` 等必要依赖。
 
 ## 🛠️ 环境配置
 1. **安装依赖**:
    ```bash
    pip install -r requirements.txt
    ```
-2. **设置环境变量** (推荐):
-   为了安全，建议不要在脚本中明文存储密码。
+2. **凭证管理**:
+   - 脚本默认使用内置凭证，建议通过环境变量增强安全性：
    - `export CRM_PWD="你的密码"`
 
-## 🚀 快速运行
-```bash
-python main/crm_tool.py
-```
+## 🚀 运行指令
+脚本采用参数化运行，格式为：`python main/crm_tool.py [模式] [姓名]`
 
-## 📊 输出说明
-脚本将输出结构化的 JSON 数据，包含以下字段：
-- `序号`: 实时业绩排名
-- `姓名`: 员工姓名
-- `业绩`: 当前完成业绩数值
-- `小组`: 所属团队名称
+### A. 业绩查询 (Performance)
+- **查看前 5 名**: `python main/crm_tool.py perf`
+- **查询特定员工业绩**: `python main/crm_tool.py perf Panawat`
 
-## ⚠️ 安全警示
-- **凭证安全**: 请勿将包含明文密码的代码提交至公开仓库。
-- **SSL 警告**: 脚本目前配置为跳过 SSL 校验 (`verify=False`)，仅限内部网络使用。
+### B. 通话效率查询 (Call Stats)
+- **查看今日全部通话统计**: `python main/crm_tool.py call`
+- **查询特定员工通话详情**: `python main/crm_tool.py call Panawat`
+
+## 📊 字段解析
+- **业绩数据**: 排名、姓名、小组、业绩总额。
+- **通话数据**: CC 姓名、通话总时长 (0-24h)、首次通话时间 (First call)、总通话次数。
+
+## ⚠️ 注意事项
+- **VPN**: 访问 `crm.51talk.com` 需确保处于公司内网或已开启 VPN。
+- **字段变更**: 若 CRM 网页改版导致数据错位，需调整脚本中的 `cells` 索引。
 ```
 
 ---
 
-### 2. skill.md
-**用途**：直接喂给 AI Agent（如 GPTs, Claude, AutoGPT），作为它的“技能书”。
+### 2. skill.md (更新版)
+**重点：** 赋予 Agent 关联分析的能力。
 
 ```markdown
-# Skill: CRM 业绩数据实时查询 (CRM_Performance_Query)
+# Skill: CRM 综合运营数据助手 (Performance & Call Analysis)
 
 ## 1. 核心能力定义
-通过运行 `main/crm_tool.py` 模拟管理员登录 CRM 系统，抓取 `type=2` 页面的实时业绩排行榜。能够将非结构化的网页表格转化为结构化 JSON 数据，支持对话式的数据检索与分析。
+通过执行 `main/crm_tool.py` 脚本，Agent 可实时获取 CRM 系统的两类核心数据：
+1. **业绩表现**: 员工的实时排名与销售额。
+2. **行为效率**: 员工的拨号频次、通话时长及开启工作的时间（First Call）。
 
-## 2. 账号与权限信息
-- **账号**: `THCC-Panawat`
-- **目标地址**: `https://crm.51talk.com/Performance/getSsPreformanceList?type=2`
-- **执行路径**: `main/crm_tool.py`
+## 2. 技能指令集 (CLI Reference)
+| 查询目标 | 执行指令 | 参数说明 |
+| :--- | :--- | :--- |
+| 全局业绩/排名 | `python main/crm_tool.py perf` | 默认返回 Top 5 |
+| 个人业绩查询 | `python main/crm_tool.py perf [姓名]` | 模糊匹配姓名 |
+| 全局通话统计 | `python main/crm_tool.py call` | 获取当日全员通话行为 |
+| 个人通话查询 | `python main/crm_tool.py call [姓名]` | 查看特定 CC 的努力程度 |
 
-## 3. Agent 运行逻辑 (Step-by-Step)
-1. **环境初始化**: 确保安装了 `pandas`, `requests`, `beautifulsoup4`。
-2. **触发条件**: 当用户询问“XX的业绩”、“现在的排名”、“前三名是谁”等问题时。
-3. **执行脚本**: 运行 `python main/crm_tool.py` 获取最新的 JSON 数据。
-4. **数据处理**: 
-   - 搜索 `姓名` 匹配用户查询的目标。
-   - 提取 `序号` 作为排名反馈。
-   - 如果用户没有指定姓名，默认展示前 5 名。
+## 3. Agent 分析逻辑 (Pro-Active Insights)
+当用户提出需求时，Agent 应具备以下分析思路：
+- **查考勤/状态**: 检查 `call` 模式下的 `首次通话 (First call)`。如果时间较晚，暗示员工进入状态慢。
+- **查工作量**: 检查 `通话总时长` 和 `通话次数`。
+- **综合评估**: 关联业绩与通话数据。
+  - *分析模型*: 如果“通话时长极高”但“业绩排名靠后”，可能存在无效沟通，建议关注其通话质量。
 
 ## 4. 对话回复规范
-- **禁止输出**: 不要输出 MD5 哈希值、登录过程日志或原始 HTML 源码。
-- **推荐输出**: 以自然的语气回复。
-  - *例子*: "查询到 Panawat 目前排名第 3，业绩为 15,200，属于泰国销售一组。"
-- **异常处理**: 如果脚本返回登录失败，请提示用户检查 CRM 密码或 VPN 状态。
+- **简洁直观**: 优先展示关键数据点，避免大段 JSON 输出。
+- **语气建议**: 针对运营管理场景，回复应准确且具有洞察力。
+  - *示例*: "Panawat 今天的表现很好，首通电话在 09:02 拨出，目前通话时长 180 分钟，业绩排在全组第 3 名。"
 
-## 5. 数据字段映射
-| 原始字段 | Agent 识别名 | 备注 |
-| :--- | :--- | :--- |
-| 序号 | 排名 | 数字越小排名越高 |
-| 姓名 | 员工名 | 支持模糊匹配 |
-| 业绩 | 销售额/课时 | 核心数值 |
-| 小组 | 团队 | 用于归类分析 |
+## 5. 数据源映射
+- **业绩地址**: `/Performance/getSsPreformanceList?type=2`
+- **通话地址**: `/admin/user/cc_call_info_new.php`
 ```
