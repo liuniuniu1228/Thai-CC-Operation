@@ -69,41 +69,50 @@ def fetch_performance(session, name=None, top_n=5):
     except Exception as e:
         print(f"业绩抓取错误: {e}")
 
-def fetch_call_data(session, name=None):
+def fetch_call_data(session, name=None, top_n=20):
     """获取通话数据"""
     try:
-        # 默认访问页面，获取当日数据
         resp = session.get(CALL_URL, verify=False, timeout=15)
         soup = BeautifulSoup(resp.text, 'html.parser')
-        table = soup.find('table', {'id': 'table_id'}) or soup.find('table') # 尝试定位通话表格
+        table = soup.find('table', {'id': 'salary'})
         
         if not table:
             print("❌ 未能找到通话数据表格。")
             return
 
         rows = table.find_all('tr')
-        print(f"\n--- 通话效率统计 (Target: {name if name else '全部'}) ---")
-        found = False
+        results = []
         
-        for row in rows:
+        for row in rows[2:]:  # 跳过表头(行0)和合计(行1)
             cells = row.find_all('td')
-            # 假设字段索引：CC(0), 通话总时长(1), 首次通话(2), 通话总次数(3)
-            # 注意：如果 CRM 列顺序不同，请调整 cells[n] 的索引
-            if len(cells) < 4: continue
-            
-            cc_name = cells[0].get_text(strip=True)
-            if cc_name == "CC" or not cc_name: continue # 跳过表头
-            
-            if name and name.lower() not in cc_name.lower(): continue
-            
-            duration = cells[1].get_text(strip=True)
-            first_call = cells[2].get_text(strip=True)
-            total_calls = cells[3].get_text(strip=True)
-            
-            print(f"CC: {cc_name:<15} | 总时长: {duration:<10} | 首次: {first_call:<10} | 次数: {total_calls}")
-            found = True
-        
-        if not found: print("未找到匹配的通话记录。")
+            if not cells or len(cells) < 12:
+                continue
+            cc_name = cells[1].get_text(strip=True)
+            if not cc_name:
+                continue
+            results.append({
+                "cc": cc_name,
+                "total_duration": cells[2].get_text(strip=True),
+                "first_call": cells[3].get_text(strip=True),
+                "last_call": cells[4].get_text(strip=True),
+                "total_calls": cells[5].get_text(strip=True),
+                "valid_calls": cells[6].get_text(strip=True),
+                "eff_rate": cells[7].get_text(strip=True),
+                "avg_call": cells[8].get_text(strip=True),
+            })
+
+        if name:
+            output = [r for r in results if name.lower() in r["cc"].lower()]
+        else:
+            output = results[:top_n]
+
+        print(f"\n--- 通话效率统计 (Target: {name if name else 'Top '+str(top_n)}) ---")
+        for r in output:
+            print(f"CC: {r['cc']:<20} | 时长: {r['total_duration']:>7}min | 首次: {r['first_call']:<8} | 次数: {r['total_calls']:>3} | 有效率: {r['eff_rate']}")
+
+        if not output:
+            print("未找到匹配的通话记录。")
+        return output
     except Exception as e:
         print(f"通话数据抓取错误: {e}")
 
