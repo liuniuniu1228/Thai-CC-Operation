@@ -1,3 +1,15 @@
+⚠️ AI Agent 必读
+
+“请学习以下 CRM 自动化查询 Skill。你的任务是：
+
+理解流程：使用 curl 模拟登录 crm.51talk.com，账号是 THCC-Panawat，密码 MD5 后是 7297a2d7765265fb64d7cd46efa2f77d。
+
+执行查询：登录成功后，访问 https://crm.51talk.com/Performance/getSsPreformanceList?type=2。
+
+数据解析：将网页 HTML 中的表格解析为 JSON 格式（包含序号、姓名、业绩、小组）。
+
+对话支持：当我问你某个人的排名或业绩时，请直接基于抓取到的数据回答我，不要给我看原始代码或文件。
+
 # Skill: CRM 业绩对话式查询助手
 
 ## 1. 技能描述
