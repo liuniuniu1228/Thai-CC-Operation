@@ -1,94 +1,57 @@
-⚠️ AI Agent 必读
-
-“请学习以下 CRM 自动化查询 Skill。你的任务是：
-
-理解流程：使用 curl 模拟登录 crm.51talk.com，账号是 THCC-Panawat，密码 MD5 后是 7297a2d7765265fb64d7cd46efa2f77d。
-
-执行查询：登录成功后，访问 https://crm.51talk.com/Performance/getSsPreformanceList?type=2。
-
-数据解析：将网页 HTML 中的表格解析为 JSON 格式（包含序号、姓名、业绩、小组）。
-
-对话支持：当我问你某个人的排名或业绩时，请直接基于抓取到的数据回答我，不要给我看原始代码或文件。
-
-# Skill: CRM 业绩对话式查询助手
+# Skill: CRM 综合运营数据助手 (Performance & Call Analysis)
 
 ## 1. 技能描述
-此技能允许 Agent 登录 CRM 系统，抓取并解析 `type=2` 的业绩列表，并将数据转化为结构化 JSON。Agent 接收到数据后，可以针对“姓名”、“排名”、“业绩”等关键词与用户进行自然语言交互。
+此技能允许 Agent 登录 CRM 系统，抓取并关联两类核心数据：
+1. **业绩列表 (`perf`)**: 实时排名、姓名、业绩、小组。
+2. **通话统计 (`call`)**: CC 姓名、通话总时长、首次通话时间 (First Call)、通话总次数。
 
-## 2. 核心指令 (Agent Action)
-当用户询问业绩相关问题时，Agent 应执行以下步骤：
-1. **认证**: 执行登录并获取 Session。
-2. **抓取**: 访问业绩页面。
-3. **解析**: 将 HTML 转换为结构化文本/JSON。
-4. **回答**: 根据 JSON 内容回答用户的具体问题。
+Agent 能够根据用户指令自动切换抓取模式，并提供基于数据的自然语言反馈。
 
----
+## 2. 核心指令 (Agent Actions)
+当接收到用户查询时，Agent 应执行以下逻辑：
 
-## 3. 执行脚本 (Shell + Python 混合版)
-此脚本执行后会直接在控制台（stdout）输出 JSON，方便 Agent 直接读取进入内存。
-
-```bash
-#!/bin/bash
-# 1. 环境准备
-CRM_USER="THCC-Panawat"
-CRM_PWD_MD5="7297a2d7765265fb64d7cd46efa2f77d"
-COOKIE_FILE="/tmp/crm_cookie.txt"
-
-# 2. 登录流程
-curl -s -c $COOKIE_FILE -b $COOKIE_FILE -k -X POST \
-  "https://crm.51talk.com/admin/login.php" \
-  -d "user_name=$CRM_USER&password=$CRM_PWD_MD5&user_type=admin&login_employee_type=sideline&Submit=%E7%99%BB%E5%BD%95" -L > /dev/null
-
-# 3. 抓取数据并使用 Python 实时解析成 JSON 输出
-curl -s -b $COOKIE_FILE -k "https://crm.51talk.com/Performance/getSsPreformanceList?type=2" | python3 - <<EOF
-import pandas as pd
-import sys
-import json
-
-try:
-    # 自动识别页面中的表格
-    dfs = pd.read_html(sys.stdin.read())
-    # 假设业绩在第一个表格，提取关键列
-    df = dfs[0][['序号', '姓名', '业绩', '小组']]
-    # 转换为字典格式输出，方便 Agent 识别
-    print(json.dumps(df.to_dict(orient='records'), ensure_ascii=False))
-except Exception as e:
-    print(json.dumps({"error": str(e)}))
-EOF
-```
+| 用户查询场景 | 内部执行指令 | 逻辑处理重点 |
+| :--- | :--- | :--- |
+| **查询业绩排名** | `python main/crm_tool.py perf [姓名]` | 提取“排名”与“业绩”字段。 |
+| **查询通话表现** | `python main/crm_tool.py call [姓名]` | 关注“首次通话时间”评估状态。 |
+| **综合评估员工** | 依次执行 `perf` 和 `call` 指令 | 关联业绩与时长，判断工作效率。 |
 
 ---
 
-## 4. Agent 对话逻辑配置 (Prompting Guide)
+## 3. Agent 运行规范 (Prompting Guide)
 
-为了让 Agent 能够自然对话，请在 Agent 的 **System Instructions** 中加入以下逻辑：
+### **A. 数据处理准则**
+* **业绩数据结构**: `[{"rank": "1", "name": "Panawat", "group": "Thai-01", "value": "12000"}]`
+* **通话数据结构**: `[{"name": "Panawat", "duration": "120 min", "first_call": "09:05", "total_calls": "45"}]`
+* **匹配原则**: 使用 `name` (姓名) 字段作为主键进行跨表关联。
 
-> **数据处理规范：**
-> * 当你通过该 Skill 获取到数据后，你会得到一个包含多个对象的列表，例如：`[{"序号": 1, "姓名": "张三", "业绩": 5000, "小组": "A组"}, ...]`。
-> * **排名查询**: “序号”即为该员工的实时排名。
-> * **逻辑推理**: 
->   * 如果用户问“谁是第一名？”，请查找 `序号 == 1` 的姓名。
->   * 如果用户问“XX 的业绩怎么样？”，请根据姓名匹配对应的业绩和小组。
->   * 如果用户问“我们组谁最厉害？”，请先筛选“小组”，再对比“业绩”。
->
-> **回复风格示例：**
-> * *用户*：“查询一下 Panawat 的排名。”
-> * *Agent*：“好的，为您查询到 Panawat 目前在 `type=2` 类别中排名第 **5**，当前业绩为 **12,800**，所属小组为 **Thai-Sales-01**。”
-
----
-
-## 5. 交互示例
-
-**场景 A：查具体人**
-* **User**: "帮我看看王小明的业绩。"
-* **Agent**: (运行 Skill -> 检索数据) "王小明目前的业绩是 8,500，排名第 12 位，属于飞虎队小组。"
-
-**场景 B：查前三名**
-* **User**: "现在排名前三的都是谁？"
-* **Agent**: (运行 Skill -> 排序) "目前的前三名分别是：1. 李华（业绩 20,000）、2. 陈静（业绩 18,500）、3. 周强（业绩 17,000）。"
+### **B. 回复逻辑示例**
+* **考勤/状态检查**: 
+  * *用户*: "今天谁还没开始打电话？"
+  * *Agent*: (运行 `call` 模式) "目前查询到 XX 和 YY 的 '首次通话时间' 仍为空，可能尚未进入工作状态。"
+* **效率分析**:
+  * *用户*: "Panawat 表现怎么样？"
+  * *Agent*: (综合数据) "Panawat 表现出色。他今天 **09:02** 就开始了第一次通话，目前通话总长 **150分钟**，业绩位列全组第 **2** 名。"
 
 ---
 
-### 💡 开发建议
-* **实时性**: 因为业绩是动态的，建议 Agent 每次处理此类问题时都静默运行一次抓取脚本，确保数据是最新的。
-* **容错**: 如果 `type=2` 页面字段名有微调（比如“业绩”变成了“销售额”），记得更新 Python 脚本中的 `df[['...']]` 部分。
+## 4. 交互示例 (Conversational Scenarios)
+
+**场景 A：查询特定 CC 的通话时长**
+* **User**: "帮我查一下王小明的通话时长。"
+* **Agent**: (执行 `python main/crm_tool.py call 王小明`) "王小明今天总计通话 **85分钟**，共拨打 **32次**，他今天的第一通电话是在 **09:15** 拨出的。"
+
+**场景 B：寻找“卷王”（最早开工的人）**
+* **User**: "今天谁最早开始工作的？"
+* **Agent**: (执行 `python main/crm_tool.py call`) "根据通话记录显示，**陈静** 是今天最先进入状态的，她在 **08:55** 就拨出了第一通电话。"
+
+**场景 C：发现潜在问题**
+* **User**: "有没有谁通话很长但是没业绩的？"
+* **Agent**: (对比两份数据) "注意到 **李华** 今天的通话时长达到 **210分钟**（全组第一），但目前的业绩排名在 **第15名**。建议关注其通话质量，是否存在无效沟通。"
+
+---
+
+## 5. 开发者建议 (Maintenance)
+* **字段映射**: `crm_tool.py` 中已封装好列名过滤。如果 CRM 页面发生结构变动，请优先修改 Python 脚本中的 `cells[n]` 索引。
+* **安全性**: Agent 在对话中应严禁泄露 `MD5 密码` 或 `Cookie 路径` 等敏感技术细节。
+* **时效性**: 业绩与通话数据均为实时更新，Agent 应在每次询问时重新执行脚本。
