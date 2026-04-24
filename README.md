@@ -217,4 +217,3 @@ python crm_tool.py conv yesterday                # 昨天全员转化率
 python crm_tool.py conv Bell                     # Bell 本月转化率
 python crm_tool.py conv Bell yesterday           # Bell 昨天转化率
 python crm_tool.py conv --team TH-CC01Team       # TH-CC01Team 本月团队转化率
-```
