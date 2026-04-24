@@ -13,6 +13,7 @@ warnings.filterwarnings('ignore')
 CRM_URL = "https://crm.51talk.com/admin/login.php"
 PERF_URL = "https://crm.51talk.com/Performance/getSsPreformanceList?type=2"
 CALL_URL = "https://crm.51talk.com/admin/user/cc_call_info_new.php"
+STATIC_URL = "https://crm.51talk.com/admin/user/custom_static_cc.php"
 USER_NAME = "THCC-Panawat"
 RAW_PWD = os.getenv("CRM_PWD", "b@2A5qt7")
 
@@ -77,26 +78,23 @@ def fetch_performance(session, name=None, top_n=5):
 def fetch_call_data(session, name=None, start_date=None, end_date=None, top_n=20):
     """
     获取通话数据，支持日期筛选
-    注意事项：
-      - 该页面使用 JavaScript 动态加载数据
-      - Python 直接 POST 日期筛选可能无法正确返回历史数据
-      - 建议优先使用 'today' / 'yesterday' 快捷查询
+    快捷词：'today' / 'yesterday' / 'month'（本月）
     """
     today = datetime.now().strftime('%Y-%m-%d')
     yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
 
-    # 判断查询类型
     if start_date == 'today':
         post_data = {"ben_day": "Today"}
         date_label = today
     elif start_date == 'yesterday':
         post_data = {"yesterday": "Yesterday"}
         date_label = yesterday
+    elif start_date == 'month':
+        post_data = {"ben_month": "本月"}
+        date_label = f"{today[:7]}-01 至 {today}"
     else:
-        # 自定义日期
         s = start_date or today
         e = end_date or today
-        # 完整表单参数（参考页面源码中的字段名）
         post_data = {
             "start_date": s,
             "end_date": e,
@@ -119,14 +117,12 @@ def fetch_call_data(session, name=None, start_date=None, end_date=None, top_n=20
         rows = table.find_all('tr')
         results = []
 
-        # 解析数据行（跳过表头行0 和 合计行1）
         for row in rows[2:]:
             cells = row.find_all('td')
             if not cells or len(cells) < 12:
                 continue
             cc_name = cells[1].get_text(strip=True)
             if not cc_name or not re.sub(r'[^a-zA-Z]', '', cc_name):
-                # 跳过纯数字或空行
                 continue
             results.append({
                 "cc": cc_name,
@@ -142,7 +138,6 @@ def fetch_call_data(session, name=None, start_date=None, end_date=None, top_n=20
         if name:
             output = [r for r in results if name.lower() in r["cc"].lower()]
         else:
-            # 默认按通话时长降序
             sorted_results = []
             for r in results:
                 try:
@@ -167,27 +162,143 @@ def fetch_call_data(session, name=None, start_date=None, end_date=None, top_n=20
         print(f"通话数据抓取错误: {e}")
 
 
+def fetch_static(session, start_date=None, end_date=None, date_mode=None):
+    """
+    获取综合运营数据（custom_static_cc.php）
+    date_mode: 'today' / 'yesterday' / 'month' / 'all'（全量，默认）
+    也可以直接传 start_date + end_date
+    """
+    today = datetime.now().strftime('%Y-%m-%d')
+    yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+
+    if date_mode == 'today':
+        post_data = {"ben_day": "今天"}
+        date_label = today
+    elif date_mode == 'yesterday':
+        post_data = {"yesterday": "昨天"}
+        date_label = yesterday
+    elif date_mode == 'month':
+        post_data = {"ben_month": "本月"}
+        date_label = f"{today[:7]}-01 至 {today}"
+    else:
+        s = start_date or '2026-04-01'
+        e = end_date or today
+        post_data = {
+            "start_date": s,
+            "end_date": e,
+            "all_user": "",
+            "group_name": "",
+            "group_list": "",
+            "is_show_group": "y",
+            "xk": "en",
+            "": "搜索"
+        }
+        date_label = f"{s} 至 {e}"
+
+    try:
+        resp = session.post(STATIC_URL, data=post_data, verify=False, timeout=30)
+        soup = BeautifulSoup(resp.text, 'html.parser')
+        table = soup.find('table', {'id': 'salary'})
+
+        if not table:
+            print(f"❌ 未找到 {date_label} 的数据")
+            return
+
+        rows = table.find_all('tr')
+        results = []
+
+        for row in rows[2:]:
+            cells = row.find_all('td')
+            if not cells or len(cells) < 20:
+                continue
+            cc_name = cells[1].get_text(strip=True)
+            if not cc_name or cc_name in ['总计']:
+                continue
+            results.append({
+                "team": cc_name,
+                "emp_id": cells[2].get_text(strip=True),
+                "tenure": cells[3].get_text(strip=True),
+                "new_pay_rmb": cells[5].get_text(strip=True),
+                "order_usd": cells[6].get_text(strip=True),
+                "referral_pay": cells[7].get_text(strip=True),
+                "referral_orders": cells[8].get_text(strip=True),
+                "attend_rate": cells[11].get_text(strip=True),
+                "attend": cells[12].get_text(strip=True),
+                "leads": cells[13].get_text(strip=True),
+                "mkt_leads": cells[14].get_text(strip=True),
+                "referral_leads": cells[15].get_text(strip=True),
+                "narrow_leads": cells[16].get_text(strip=True),
+                "paid_num": cells[17].get_text(strip=True),
+                "paid_rate": cells[18].get_text(strip=True),
+                "paid_usd": cells[19].get_text(strip=True),
+            })
+
+        # 默认按时长降序（order_usd）
+        sorted_results = []
+        for r in results:
+            try:
+                v = float(r['order_usd'].replace(',', '')) if r['order_usd'] else 0
+            except:
+                v = 0
+            sorted_results.append((v, r))
+        sorted_results.sort(key=lambda x: -x[0])
+        results = [r for _, r in sorted_results]
+
+        print(f"\n--- 综合运营数据 ({date_label}) ---")
+        print(f"{'排名':<4} {'团队':<20} {'新付费(RMB)':>12} {'订单(USD)':>10} {'出席数':>6} {'Leads':>6} {'付费人数':>6}")
+        print("-" * 75)
+        for i, r in enumerate(results, 1):
+            print(f"{i:<4} {r['team']:<20} {r['new_pay_rmb']:>12} {r['order_usd']:>10} "
+                  f"{r['attend']:>6} {r['leads']:>6} {r['paid_num']:>6}")
+
+        if not results:
+            print("未找到数据")
+
+        return results
+
+    except Exception as e:
+        print(f"综合数据抓取错误: {e}")
+
+
 if __name__ == "__main__":
     # 使用方法：
-    # python crm_tool.py perf                    -> 业绩前5名
-    # python crm_tool.py perf Fern               -> Fern 的业绩
-    # python crm_tool.py call                    -> 今天通话前20名
-    # python crm_tool.py call Fern               -> Fern 的今天通话
-    # python crm_tool.py call Fern yesterday     -> Fern 的昨天通话
-    # python crm_tool.py call Fern 2026-04-01 2026-04-22  -> Fern 某段日期
+    # python crm_tool.py perf                     -> 业绩前5名
+    # python crm_tool.py perf Fern                 -> Fern 的业绩
+    #
+    # python crm_tool.py call                     -> 今天通话前20名
+    # python crm_tool.py call Fern                 -> Fern 今天通话
+    # python crm_tool.py call Fern yesterday       -> Fern 昨天通话
     # python crm_tool.py call yesterday           -> 昨天通话前20名
-    # python crm_tool.py call today              -> 今天通话前20名
+    # python crm_tool.py call today               -> 今天通话
+    # python crm_tool.py call month               -> 本月通话
+    #
+    # python crm_tool.py static                   -> 今天综合数据
+    # python crm_tool.py static yesterday         -> 昨天综合数据
+    # python crm_tool.py static month             -> 本月综合数据
+    # python crm_tool.py static 2026-04-01 2026-04-23 -> 指定日期区间
 
     mode = sys.argv[1] if len(sys.argv) > 1 else "perf"
-    target_name = sys.argv[2] if len(sys.argv) > 2 else None
-    s_date = sys.argv[3] if len(sys.argv) > 3 else None
-    e_date = sys.argv[4] if len(sys.argv) > 4 else None
+    arg2 = sys.argv[2] if len(sys.argv) > 2 else None
+    arg3 = sys.argv[3] if len(sys.argv) > 3 else None
+    arg4 = sys.argv[4] if len(sys.argv) > 4 else None
 
     sess = get_session()
     if sess:
         if mode == "perf":
-            fetch_performance(sess, name=target_name)
+            fetch_performance(sess, name=arg2)
         elif mode == "call":
-            fetch_call_data(sess, name=target_name, start_date=s_date, end_date=e_date)
+            # 支持: call [姓名] [today/yesterday/month/日期]
+            name = arg2 if arg2 and arg2 not in ['today', 'yesterday', 'month'] else None
+            s = arg2 if arg2 in ['today', 'yesterday', 'month'] else arg2
+            e = arg3 if arg2 in ['today', 'yesterday', 'month'] else arg3
+            fetch_call_data(sess, name=name, start_date=s, end_date=e)
+        elif mode == "static":
+            # 支持: static [today/yesterday/month/日期1 日期2]
+            if arg2 in ['today', 'yesterday', 'month']:
+                fetch_static(sess, date_mode=arg2)
+            else:
+                s = arg2 or None
+                e = arg3 or None
+                fetch_static(sess, start_date=s, end_date=e)
         else:
-            print("未知模式，请使用 'perf' 或 'call'")
+            print("未知模式，请使用 'perf' / 'call' / 'static'")
