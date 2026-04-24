@@ -5,6 +5,7 @@ import requests
 import hashlib
 from bs4 import BeautifulSoup
 import sys
+from datetime import datetime
 
 warnings.filterwarnings('ignore')
 
@@ -37,7 +38,7 @@ def get_session():
         return None
 
 def fetch_performance(session, name=None, top_n=5):
-    """获取业绩数据"""
+    """获取业绩数据 (保持不变)"""
     try:
         resp = session.get(PERF_URL, verify=False, timeout=15)
         soup = BeautifulSoup(resp.text, 'html.parser')
@@ -69,21 +70,35 @@ def fetch_performance(session, name=None, top_n=5):
     except Exception as e:
         print(f"业绩抓取错误: {e}")
 
-def fetch_call_data(session, name=None, top_n=20):
-    """获取通话数据"""
+def fetch_call_data(session, name=None, start_date=None, end_date=None, top_n=20):
+    """获取通话数据，支持日期筛选"""
+    # 如果没传日期，默认当天
+    today = datetime.now().strftime('%Y-%m-%d')
+    start_date = start_date or today
+    end_date = end_date or today
+
+    # 构造表单数据，模拟点击 submit
+    post_data = {
+        "start_time": start_date,
+        "end_time": end_date,
+        "submit": "submit" # 对应截图中的 submit 按钮
+    }
+
     try:
-        resp = session.get(CALL_URL, verify=False, timeout=15)
+        # 使用 POST 请求提交日期筛选
+        resp = session.post(CALL_URL, data=post_data, verify=False, timeout=15)
         soup = BeautifulSoup(resp.text, 'html.parser')
         table = soup.find('table', {'id': 'salary'})
         
         if not table:
-            print("❌ 未能找到通话数据表格。")
+            print(f"❌ 未能找到 {start_date} 至 {end_date} 的通话数据表格。")
             return
 
         rows = table.find_all('tr')
         results = []
         
-        for row in rows[2:]:  # 跳过表头(行0)和合计(行1)
+        # 解析逻辑
+        for row in rows[2:]:  # 跳过表头和合计
             cells = row.find_all('td')
             if not cells or len(cells) < 12:
                 continue
@@ -93,12 +108,8 @@ def fetch_call_data(session, name=None, top_n=20):
             results.append({
                 "cc": cc_name,
                 "total_duration": cells[2].get_text(strip=True),
-                "first_call": cells[3].get_text(strip=True),
-                "last_call": cells[4].get_text(strip=True),
                 "total_calls": cells[5].get_text(strip=True),
-                "valid_calls": cells[6].get_text(strip=True),
                 "eff_rate": cells[7].get_text(strip=True),
-                "avg_call": cells[8].get_text(strip=True),
             })
 
         if name:
@@ -106,9 +117,9 @@ def fetch_call_data(session, name=None, top_n=20):
         else:
             output = results[:top_n]
 
-        print(f"\n--- 通话效率统计 (Target: {name if name else 'Top '+str(top_n)}) ---")
+        print(f"\n--- 通话效率统计 ({start_date} 至 {end_date}) ---")
         for r in output:
-            print(f"CC: {r['cc']:<20} | 时长: {r['total_duration']:>7}min | 首次: {r['first_call']:<8} | 次数: {r['total_calls']:>3} | 有效率: {r['eff_rate']}")
+            print(f"CC: {r['cc']:<20} | 总时长: {r['total_duration']:>7}min | 总次数: {r['total_calls']:>3} | 有效率: {r['eff_rate']}")
 
         if not output:
             print("未找到匹配的通话记录。")
@@ -117,17 +128,21 @@ def fetch_call_data(session, name=None, top_n=20):
         print(f"通话数据抓取错误: {e}")
 
 if __name__ == "__main__":
-    # 使用方法：
-    # python crm_tool.py perf [姓名]  -> 查业绩
-    # python crm_tool.py call [姓名]  -> 查通话
+    # 使用方法更新：
+    # python crm_tool.py perf [姓名]
+    # python crm_tool.py call [姓名] [开始日期] [结束日期]
+    # 示例：python crm_tool.py call "Panawat" 2026-04-01 2026-04-24
+    
     mode = sys.argv[1] if len(sys.argv) > 1 else "perf"
-    target_name = sys.argv[2] if len(sys.argv) > 2 else None
+    target_name = sys.argv[2] if (len(sys.argv) > 2 and sys.argv[2] != "None") else None
+    s_date = sys.argv[3] if len(sys.argv) > 3 else None
+    e_date = sys.argv[4] if len(sys.argv) > 4 else None
     
     sess = get_session()
     if sess:
         if mode == "perf":
             fetch_performance(sess, name=target_name)
         elif mode == "call":
-            fetch_call_data(sess, name=target_name)
+            fetch_call_data(sess, name=target_name, start_date=s_date, end_date=e_date)
         else:
             print("未知模式，请使用 'perf' 或 'call'")
